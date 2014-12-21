@@ -73,7 +73,7 @@ int main()
 		outputLength++;
 	outputLength *= 2;
 
-	char *base64Array = (char *) malloc ( sizeof(char) * outputLength);
+	char *base64Array = (char *) malloc ( sizeof(char) * (outputLength + 1));
 	if (intArray == NULL)
 	{
 		fprintf(stderr, "Error[hexToBase64]: error allocating memory");
