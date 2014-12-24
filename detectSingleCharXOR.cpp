@@ -1,7 +1,8 @@
 //Vincent Siu
 //2014-12-22
 //detectSingleCharXOR.cpp
-//Takes in multiple lines of text, and only writes to output the valid lines
+//Takes in multiple lines of text which are the hex encodings of character files,
+//and only writes the valid decrypted lines into the output file
 
 #include "fileReader.h"
 #include <map>
@@ -11,7 +12,7 @@
 #define output_filename "output.txt"
 
 //String of win. This is here for reference
-#define char_frequency_list "etaoin shrdlucETAOINSHRDLUC"
+#define char_frequency_list "etaoin shrdluETAOINSHRDLU"
 
 
 void applyXORKeyToString(char *inputString, int inputLength, char key, char **outputStringAddress);
@@ -21,15 +22,18 @@ int changeHexCharsToChars(char *inputString, int inputLength, char **outputStrin
 
 int main()
 {
-
 	// Initializations, parsing the multi line file
+    //Important variables:
+    //1. inputString: Contains the text of the entire file
+    //2. ptrs_lineInput: An array of pointers to CStrings, each CString is the raw character string (Since in the
+    //   input, each byte is given as 2 hexadecimal characters, I have to translate it)) 
+    //3. length_lineInput: An array of ints which give the length of the CString of the corresponding index
+    //   in the previous array.
+    //4. numberOfLines: how many lines were stored in the previous two arrays
 	//////////////////////////////////////////////////////////////////
     char *inputString = NULL;
     char *inputFile = input_filename;
     int inputLength = readTextFromFile (&inputString, inputFile);    
-
-
-
     char **ptrs_lineInput = (char **) malloc (sizeof (char *) );
     int *length_lineInput = (int *) malloc (sizeof (int));
     if (ptrs_lineInput == NULL || length_lineInput == NULL)
@@ -37,6 +41,7 @@ int main()
     	fprintf( stderr, "Error[singleByteXORcipher]: error allocating memory");
     	exit(1);
     }
+    //These initializations help streamline my code
 	ptrs_lineInput[0] = NULL;
     length_lineInput[0] = 0;
 
@@ -56,7 +61,6 @@ int main()
             length_lineInput[idx_currentLine] = 0;
             ptrs_lineInput[idx_currentLine] = NULL;
     	}
-		
     }
 	if (inputString[i-1] != '\n')
     {
@@ -65,24 +69,15 @@ int main()
     	idx_currentLine++;
     }
 
-
-
-	for ( int l = 0; l < idx_currentLine; l++)
-	{
-		printf("%d:  ", length_lineInput[l]);
-		for ( int o = 0; o < length_lineInput[l]; o++)
-		{
-			printf("%.2x", (unsigned char) ptrs_lineInput[l][o]);
-		}
-		printf("\n");
-	}
-
-
-
-
     int numberOfLines = idx_currentLine;
+
+
+
+    //Here, we're finding the character frequencies, trying all possible keys, and placing possible output
+    //into the output string
+    /////////////////////////////////////////////////////////////////////////////////
 	int idx_outputString = 0;
-	int outputSize = 61;
+	int outputSize = 31;
 	char *outputString = (char *) malloc (sizeof (char) * outputSize);
     for (i = 0; i < numberOfLines; i++)
     {
@@ -110,63 +105,44 @@ int main()
          		maxCount = (itr->second);
          	}
          }        
-     
-     
-
+         if (mostFrequentChar != 1)
+         {
          //Using the frequency analysis, testing out all the possible max_frequency characters and creating keys
          //based on that information
          bool foundValidKey = false;
          char *mostFrequentCharList = char_frequency_list;
          char testKey;
          char *deciphered_charString = NULL;
-         for (int j = 0; j < 27; j++)
+         for (int j = 0; j < 25; j++)
          {
          	testKey = mostFrequentChar ^ mostFrequentCharList[j];
          	applyXORKeyToString(raw_charString, charStringLength, testKey, &deciphered_charString);
          	if ( check_valid_characters(deciphered_charString, charStringLength) == 1)
          	{
          		char *outputFile = output_filename;
-         		//foundValidKey = true;
-				//break;
-
-
-
-
-
-
-
-
-
-				int j = 0;
-				int k = 0;
-				for (k = idx_outputString; k < (idx_outputString + 60); k++, j++)
-				{
-					outputString[k] = deciphered_charString[j];
-				}
-				outputString[k] = '\0';
-				outputSize += 60;
-				idx_outputString += 60;
-				outputString = (char *)realloc(outputString, sizeof (char)* outputSize);
+         		foundValidKey = true;
+				break;
          	}
-        		free (deciphered_charString);
-        		deciphered_charString = NULL;
+        	free (deciphered_charString);
+        	deciphered_charString = NULL;
          }    
-		 /*
+		 
 		 if (foundValidKey)
 		 {
 			 int j = 0;
 			 int k = 0;
-			 for (k = idx_outputString; k < (idx_outputString + 60); k++, j++)
+			 for (k = idx_outputString; k < (idx_outputString + charStringLength); k++, j++)
 			 {
 				 outputString[k] = deciphered_charString[j];
 			 }
 			 outputString[k] = '\0';
-			 outputSize += 60;
-			 idx_outputString += 60;
+			 outputSize += charStringLength;
+			 idx_outputString += charStringLength;
 			 outputString = (char *) realloc (outputString, sizeof (char) * outputSize);
 			 free (deciphered_charString);
 		 }
-		 */
+		 
+        }
 	}
 
 	char *outputFile = output_filename;
@@ -220,23 +196,53 @@ unsigned char charToHexBit (char inputChar)
  * I consider the following ranges of the ASCII table to be invalid:
  * 0-8, 11-12, 14-31, 127 inclusive
  * Also, considering how ASCII only encodes the first 127 characters, any characters from 128 to 255 are invalid
+ * Some additional restrictions:
+ * 1. if a string doesn't have a space in it, then it is considered invalid.
+ * 2. if the string has a backslash in it, then it is considered invalid
+ * 3. if it doesn't have matching open and closing brackets, then it is considered invalid
+ * 4. ^same with parentheses
+ * 5. "<" and ">" are considered invalid
  * @param  inputString Ptr to given CString 
  * @param  inputLength Length of given CString
  * @return             1 If the string is valid text, and -1 if the string is invalid text
  */
 int check_valid_characters (char *inputString, int inputLength)
 {
+	int openBrackets = 0;
+	int openParentheses = 0;
+	bool foundSpace = false;
     for (int i = 0; i < inputLength; i++)
     {
-        if ((unsigned char) inputString[i] >= 0  &&  (unsigned char) inputString[i] <= 8)
+		unsigned char tester = (unsigned char) inputString[i];
+        if (tester >= 0  &&  tester <= 8)
             return -1;
-        if ((unsigned char) inputString[i] >= 11 &&  (unsigned char) inputString[i] <= 12)
+        if (tester >= 11 &&  tester <= 12)
             return -1;
-        if ((unsigned char) inputString[i] >= 14 &&  (unsigned char) inputString[i] <= 31)
+        if (tester >= 14 &&  tester <= 31)
             return -1;
-        if ((unsigned char) inputString[i] >= 127)
+        if (tester >= 127)
             return -1;
+		if (tester == 32)
+			foundSpace = true;
+		if (tester == 40)
+			openParentheses++;
+		if (tester == 41)
+			openParentheses--;
+		if (tester == 123)
+			openBrackets++;
+		if (tester == 125)
+			openBrackets--;
+		if ((openBrackets < 0) || (openParentheses < 0))
+			return -1;
+		if (tester == 92)
+			return -1;
+		if (tester == 60 || tester == 62)
+            return -1; 
     }
+	if ((openBrackets > 0) || (openParentheses > 0))
+		return -1;
+	if (!foundSpace)
+		return -1;
     return 1;
 }
 
