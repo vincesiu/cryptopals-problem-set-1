@@ -4,18 +4,26 @@
 
 #include "fileReader.h"
 #include <cstring>
+#include <map>
 
 #define maxExpectedKeyLength 40
 
 #define input_filename "input1.txt"
 #define output_filename "output.txt"
 
+//String of win. This is here for reference
+#define char_frequency_list "abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRXTUVWXYZ1234567890" //"etaoin shrdlucETAOINSHRDLUC"
+#define char_frequency_list_length 63
+
 int calculateHammingDistance(char *inputString1, char *inputString2, int inputLength);
 int removeNewlines(char *inputString, int inputLength);
 char charToBase64(char input);
 int base64toBase256(char *inputString, int inputLength, char **outputStringAddress);
-void findTopFiveKeyLengths(float *inputString, int inputLength, int **outputStringAddress);
+void findTopTenKeyLengths(float *inputString, int inputLength, int **outputStringAddress);
 bool decipherRepeatingXOR(int keyLength, char *inputString, int inputLength, char **key);
+int check_valid_characters (char *inputString, int inputLength);
+void applyXORKeyToString (char *inputString, int inputLength, char key, char **outputStringAddress);
+
 
 
 int main()
@@ -54,55 +62,167 @@ for (int i = 0; i <= maxExpectedKeyLength; i++)
 	printf("keyLength %d: %f\n", i, list_normalizedEditDistances[i]);
 }
 
-int *list_topFiveKeyLengths = NULL;
-findTopFiveKeyLengths(list_normalizedEditDistances, maxExpectedKeyLength + 1, &list_topFiveKeyLengths);
+int *list_topTenKeyLengths = NULL;
+findTopTenKeyLengths(list_normalizedEditDistances, maxExpectedKeyLength + 1, &list_topTenKeyLengths);
 
-for (int i = 0; i < 5; i++)
+for (int i = 0; i < 10; i++)
 {
-	printf("top %d: %d\n", i, list_topFiveKeyLengths[i]);
+	printf("top %d: %d\n", i, list_topTenKeyLengths[i]);
 }
 
 char *key = NULL;
-for (int i = 0; i < 5; i++)
+/*
+for (int i = 0; i < 10; i++)
 {
-	if (decipherRepeatingXOR(list_topFiveKeyLengths[i], parsed_inputString, inputLength, &key))
+	if (decipherRepeatingXOR(list_topTenKeyLengths[i], parsed_inputString, inputLength, &key))
 	{
-		for (int j = 0; j < list_topFiveKeyLengths[i]; j++)
+		for (int j = 0; j < list_topTenKeyLengths[i]; j++)
 			printf("%c", key[j]);
 	}
 }
+*/
+for (int i = 0; i < inputLength; i++)
+	printf("%.2x ", parsed_inputString[i]);
+int keyLength = 0;
+for (int i = 2; i < 50; i++)
+{
+	if (decipherRepeatingXOR(i, parsed_inputString, inputLength, &key))
+	{
+		for (int j = 0; j < list_topTenKeyLengths[i]; j++)
+			printf("%c", key[j]);
+		keyLength = i;
+		break;
+	}
+}
 
+char *outputString = (char *) malloc (sizeof (char) * (inputLength + 1));
+int idx = 0;
+for ( int i = 0; i < inputLength; i++)
+{
+	outputString[i] = parsed_inputString[i] ^ key[ i%keyLength ];
+}
+outputString[inputLength] = '\0';
+char *outputFile = output_filename;
 
+writeTextToFile (outputString, outputFile);
+
+free (outputString);
 free (raw_inputString);
 free (parsed_inputString);
 free (list_normalizedEditDistances);
-free (list_topFiveKeyLengths);
+free (list_topTenKeyLengths);
 
 
 }
 
 
-bool decipherRepeatingXOR(int keyLength, char *inputString, int inputLength, char **key)
+
+/**
+ * The big one.
+ * @param  keyLength   /
+ * @param  inputString /
+ * @param  inputLength /
+ * @param  key         If key is found, this will point to a char string
+ * @return             true found the key, false if didn't find the key
+ */
+bool decipherRepeatingXOR(int keyLength, char *inputString, int inputLength, char **keyAddress)
 {
 	char **list_ptrsToBlocks = (char **) malloc (sizeof (char*) * keyLength);
 	int length = inputLength / keyLength;
 	int leftovers = inputLength % keyLength;
 	for (int i = 0; i < keyLength; i++)
-		list_ptrsToBlocks[i] = (char *) malloc (sizeof (char) * length);
-	for (int i = 0; i < leftovers; i++)
-		list_ptrsToBlocks[i] = (char *) realloc ( list_ptrsToBlocks[i], sizeof (char) * (length + 1) );
-	//check if the ^ code is right in its lengths
+	{
+		int currentLength = length + 1;
+		if (i < leftovers)
+			currentLength ++;
+		list_ptrsToBlocks[i] = (char *) malloc (sizeof (char) * currentLength);
+		int idx = 0;
+		for (int j = i; j < inputLength; j += keyLength, idx++)
+			list_ptrsToBlocks[i][idx] = inputString[j];
+		list_ptrsToBlocks[i][idx] = '\0';
+	}
 
 
-	//now copy over the correct contents into each block
-	//Then, apply the single XOR code to this, remember to slacken the restrictions on viable strings
+	char *frequencyList = char_frequency_list;
+	char *key = (char *) malloc (sizeof (char) * (keyLength + 1));
+	bool foundKey;
+	for (int i = 0; i < keyLength; i++)
+	{
+		foundKey = false;
+		int currentLength = length;
+		if (i < leftovers)
+			currentLength++;
+		char *temp = NULL;
+
+			std::map<char, int> frequencyList_Input; 
+        	for (int j = 0; j < currentLength; j++)
+	        {
+	        	char temp = list_ptrsToBlocks[i][j];
+	         	if (frequencyList_Input.count(temp) == 1)
+	         		frequencyList_Input[temp]++;
+	         	else 
+	         		frequencyList_Input[temp] = 1;
+	        }    
+	         
+	        char mostFrequentChar;
+	        int maxCount = 0;
+			//int der = 0;
+	        for (std::map<char, int>::iterator itr = frequencyList_Input.begin(); itr != frequencyList_Input.end(); itr++)
+	        {
+	        	if ((itr->second) > maxCount)
+	         	{
+	         		mostFrequentChar = (itr->first);
+	         		maxCount = (itr->second);
+	         	}
+				//printf("%.2x : %d\n", unsigned char (itr->first), itr->second);
+				//der++;
+	        }
+		//	printf("\n");
+
+
+
+
+
+
+
+		for (int j = 0; j < char_frequency_list_length; j++)
+		{
+			char trialKey = mostFrequentChar ^ frequencyList[j];
+			if (trialKey == '&')
+			{
+				printf("\n");
+			}
+			applyXORKeyToString(list_ptrsToBlocks[i], currentLength, trialKey, &temp);
+			if (check_valid_characters(temp, currentLength) == 1)
+			{
+				key[i] = trialKey;
+				foundKey = true;
+				free(temp);
+				break;
+			}
+
+			free(temp);
+			temp = NULL;
+		}
+		if (foundKey == false)
+			break;
+	}
 	
-	//lehgo
+
 
 	for (int i = 0; i < keyLength; i++)
 		free(list_ptrsToBlocks[i]);
 	free(list_ptrsToBlocks);
-	return false;
+	if (foundKey == false)
+	{
+		free (key);
+		return false;
+	}
+	else
+	{
+		*keyAddress = key;
+		return true;
+	}
 }
 
 /**
@@ -197,7 +317,7 @@ int base64toBase256(char *inputString, int inputLength, char **outputStringAddre
 	}
 	outputString[outputLength] = '\0';
 	*outputStringAddress = outputString;
-	return inputLength;
+	return outputLength;
 }
 
 /**
@@ -206,12 +326,12 @@ int base64toBase256(char *inputString, int inputLength, char **outputStringAddre
 * @param inputLength         [description]
 * @param outputStringAddress [description]
 */
-void findTopFiveKeyLengths(float *inputString, int inputLength, int **outputStringAddress)
+void findTopTenKeyLengths(float *inputString, int inputLength, int **outputStringAddress)
 {
-	int *outputString = (int *)malloc(sizeof (int)* 5);
+	int *outputString = (int *)malloc(sizeof (int)* 10);
 	float *temp = (float *)malloc(sizeof (float)* inputLength);
 	memcpy(temp, inputString, sizeof(float)* inputLength);
-	for (int i = 0; i < 5; i++)
+	for (int i = 0; i < 10; i++)
 	{
 		float min = temp[0];
 		int index = 0;
@@ -231,8 +351,106 @@ void findTopFiveKeyLengths(float *inputString, int inputLength, int **outputStri
 }
 
 
+/**
+ * Checks if the string has all valid characters for a text string.
+ * I consider the following ranges of the ASCII table to be invalid:
+ * 0-8, 11-12, 14-31, 127 inclusive
+ * Also, considering how ASCII only encodes the first 127 characters, any characters from 128 to 255 are invalid
+ * Some additional restrictions:
+ * 1. if a string doesn't have a space in it, then it is considered invalid.
+ * 2. if the string has a backslash in it, then it is considered invalid
+ * 3. if it doesn't have matching open and closing brackets, then it is considered invalid
+ * 4. ^same with parentheses
+ * 5. "<" and ">" are considered invalid
+ * @param  inputString Ptr to given CString 
+ * @param  inputLength Length of given CString
+ * @return             1 If the string is valid text, and -1 if the string is invalid text
+ */
+int check_valid_characters (char *inputString, int inputLength)
+{
+    for (int i = 0; i < inputLength; i++)
+    {
+		unsigned char tester = (unsigned char) inputString[i];
+        if (tester >= 0  &&  tester <= 8)
+            return -1;
+        if (tester >= 11 &&  tester <= 12)
+            return -1;
+        if (tester >= 14 &&  tester <= 31)
+            return -1;
+        if (tester >= 127)
+            return -1;
+
+		//makeshift validation
+		if (tester == 37) //%
+			return -1;
+		if (tester == 126) //~
+			return -1;
+		if (tester == 35) //#
+			return -1;
+    }
+	/*
+	int openBrackets = 0;
+	int openParentheses = 0;
+	bool foundSpace = false;
+    for (int i = 0; i < inputLength; i++)
+    {
+		unsigned char tester = (unsigned char) inputString[i];
+        if (tester >= 0  &&  tester <= 8)
+            return -1;
+        if (tester >= 11 &&  tester <= 12)
+            return -1;
+        if (tester >= 14 &&  tester <= 31)
+            return -1;
+        if (tester >= 127)
+            return -1;
+		if (tester == 32)
+			foundSpace = true;
+		if (tester == 40)
+			openParentheses++;
+		if (tester == 41)
+			openParentheses--;
+		if (tester == 123)
+			openBrackets++;
+		if (tester == 125)
+			openBrackets--;
+		if ((openBrackets < 0) || (openParentheses < 0))
+			return -1;
+		if (tester == 92)
+			return -1;
+		if (tester == 60 || tester == 62)
+            return -1; 
+    }
+	if ((openBrackets > 0) || (openParentheses > 0))
+		return -1;
+	if (!foundSpace)
+		return -1;
+		*/
+    return 1;
+}
 
 
 
 
-
+/**
+ * Given an input string and a byte-sized key, this function will xor all the characters in the input string 
+ * and place the output in the outputString
+ * Example usages:       applyXORKeyToString (inputString, inputLength, key, &outputString);
+ * @param inputString         Ptr to input CSTring to be XORed
+ * @param inputLength         Length of the CString above
+ * @param key                 Byte key that will be used to encode
+ * @param outputStringAddress Address to ptr of outputString
+ */
+void applyXORKeyToString (char *inputString, int inputLength, char key, char **outputStringAddress)
+{
+    char *outputString = *outputStringAddress;
+    if (outputString != NULL)
+    {
+        fprintf(stderr, "Error[applyXORKeyToString]: Incorrect usage of arguments for this function");
+        exit(1);
+    }
+    outputString = (char *) malloc (sizeof (char) * (inputLength + 1));
+    for (int i = 0; i < inputLength; i++)
+        outputString[i] = inputString[i] ^ key;
+    outputString[inputLength] = '\0';
+    *outputStringAddress = outputString;
+}
