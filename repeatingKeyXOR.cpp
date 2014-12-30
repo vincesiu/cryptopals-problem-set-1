@@ -4,10 +4,13 @@
 
 #include "fileReader.h"
 
-#define XORKeyString "ICE"
-#define XORKeyLength 3
+//filenames
 #define input_filename "input1.txt"
-#define output_filename "output.txt"
+#define output_filename "input3.txt"
+
+//Key information, lets go portability!
+#define XORKeyString "ahegao"
+#define XORKeyLength 6
 
 
 /**

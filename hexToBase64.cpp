@@ -6,8 +6,8 @@
 
 #include "fileReader.h"
 
-#define input_filename "file.txt"
-#define output_filename "output.txt"
+#define input_filename "input3.txt"
+#define output_filename "input3.txt"
 
 /**
  * Takes a parameter that is in base 64 representation, and returns the appropriate character 

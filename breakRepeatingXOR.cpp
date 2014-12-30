@@ -1,20 +1,34 @@
 //Vincent Siu
 //2014-12-26
 //Breaking Repeating XOR
+//Very proud of myself! Abusing functions so that my main function code is relatively short! I love it
+//Nothing was sweeter than the sight of seeing the Vanilla Ice lyrics come up on the output screen...
+
+//Bugs:
+//1. [Fixed] Need to do something about the padding at the end, and how it invalidates the string
+//2. [Fixed] Test if this works using the minimal frequency list
+//3. Make everything prettier
+//4. [Fixed] Do the normalized edit distance correctly, so the target keylength shows up at the very least in the top ten
 
 #include "fileReader.h"
 #include <cstring>
 #include <map>
 
-#define maxExpectedKeyLength 40
-
-#define input_filename "input1.txt"
+//Filenames
+#define input_filename "input3.txt"
 #define output_filename "output.txt"
 
 //String of win. This is here for reference
-#define char_frequency_list "abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRXTUVWXYZ1234567890" //"etaoin shrdlucETAOINSHRDLUC"
-#define char_frequency_list_length 63
+#define char_frequency_list "etaoin shrdluETAOINSHRDLU" //"abcdefghjiklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ"//
+#define char_frequency_list_length 27 //53 
 
+//Expected Keys
+#define maxExpectedKeyLength 40
+
+//Debugging?
+#define debugging_mode true
+
+//Function Prototypes
 int calculateHammingDistance(char *inputString1, char *inputString2, int inputLength);
 int removeNewlines(char *inputString, int inputLength);
 char charToBase64(char input);
@@ -28,97 +42,120 @@ void applyXORKeyToString (char *inputString, int inputLength, char key, char **o
 
 int main()
 {
-	/*
-	char *derp1 = "this is a test";
-	char *derp2 = "wokka wokka!!!";
-	int number = calculateHammingDistance(derp1, derp2, 14);
-	printf( "%d", number);
-	*/
-char *inputFile = input_filename;
-char *raw_inputString = NULL;
-int inputLength = readTextFromFile(&raw_inputString, inputFile);
-inputLength = removeNewlines (raw_inputString, inputLength);
+	//Parsing the input
+	char *inputFile = input_filename;
+	char *raw_inputString = NULL;
+	int inputLength = readTextFromFile(&raw_inputString, inputFile);	
 
-char *parsed_inputString = NULL;
+	inputLength = removeNewlines (raw_inputString, inputLength);	
 
-inputLength = base64toBase256(raw_inputString, inputLength, &parsed_inputString);
+	char *parsed_inputString = NULL;
+	inputLength = base64toBase256(raw_inputString, inputLength, &parsed_inputString);	
+	
 
-/*
-for (int i = 0; i < 128; i++)
-{
-	printf( "%.2x", parsed_inputString[i]);
-}
-*/
-float *list_normalizedEditDistances = (float *) calloc ((maxExpectedKeyLength + 1), sizeof(float));
-list_normalizedEditDistances[0] = 1000;
-list_normalizedEditDistances[1] = 1000;
-for ( int i = 2; i <= maxExpectedKeyLength; i++)
-{
-	list_normalizedEditDistances[i] = calculateHammingDistance(parsed_inputString, parsed_inputString + i, i) / (float) i;
-}
-
-for (int i = 0; i <= maxExpectedKeyLength; i++)
-{
-	printf("keyLength %d: %f\n", i, list_normalizedEditDistances[i]);
-}
-
-int *list_topTenKeyLengths = NULL;
-findTopTenKeyLengths(list_normalizedEditDistances, maxExpectedKeyLength + 1, &list_topTenKeyLengths);
-
-for (int i = 0; i < 10; i++)
-{
-	printf("top %d: %d\n", i, list_topTenKeyLengths[i]);
-}
-
-char *key = NULL;
-/*
-for (int i = 0; i < 10; i++)
-{
-	if (decipherRepeatingXOR(list_topTenKeyLengths[i], parsed_inputString, inputLength, &key))
+	if (debugging_mode)
 	{
-		for (int j = 0; j < list_topTenKeyLengths[i]; j++)
-			printf("%c", key[j]);
-	}
-}
-*/
-for (int i = 0; i < inputLength; i++)
-	printf("%.2x ", parsed_inputString[i]);
-int keyLength = 0;
-for (int i = 2; i < 50; i++)
-{
-	if (decipherRepeatingXOR(i, parsed_inputString, inputLength, &key))
+		printf("Hex values of input");
+		for (int i = 0; i < inputLength; i++)
+			printf("%.2x ", parsed_inputString[i]);
+		printf("\n");
+	}	
+
+	//Creating a list of normalized edit distances for different keylength blocks
+	//This will help in determining the most likely candidates for size of the keylength
+	//Assigning each index of the list as a possible keylength (and ignoring a keylength of 0 and 1)
+	float *list_distances = (float *) malloc (sizeof(float) * (maxExpectedKeyLength + 1));   
+	list_distances[0] = 1000;
+	list_distances[1] = 1000;	
+
+	//Calculating the normalized hamming distance, using an average taken across four blocks
+	for ( int i = 2; i <= maxExpectedKeyLength; i++)
 	{
-		for (int j = 0; j < list_topTenKeyLengths[i]; j++)
-			printf("%c", key[j]);
-		keyLength = i;
-		break;
-	}
+	    float temp1 = calculateHammingDistance(parsed_inputString, parsed_inputString + i, i) / (float) i;
+		float temp2 = calculateHammingDistance(parsed_inputString, parsed_inputString + 2 * i, i) / (float) i;
+		float temp3 = calculateHammingDistance(parsed_inputString, parsed_inputString + 3 * i, i) / (float) i;
+		float temp4 = calculateHammingDistance(parsed_inputString, parsed_inputString + 4 * i, i) / (float) i;
+		list_distances[i] = (temp1 + temp2 + temp3 + temp4) / 4;
+	}	
+	
+
+	if (debugging_mode)
+	{
+		for (int i = 0; i <= maxExpectedKeyLength; i++)
+		{
+			printf("keyLength %d: %f\n", i, list_distances[i]);
+		}
+	}	
+	
+
+	int *list_topTenKeyLengths = NULL;
+	findTopTenKeyLengths(list_distances, maxExpectedKeyLength + 1, &list_topTenKeyLengths);	
+	
+
+	if (debugging_mode)
+	{
+		for (int i = 0; i < 10; i++)
+		{
+			printf("top %d: %d\n", i, list_topTenKeyLengths[i]);
+		}
+	}	
+	
+	
+
+	char *key = NULL;
+	int keyLength = 0;	
+
+	//This is where the heavy computation is done. We're performing brute force attacks, using the top
+	//ten candidates of keylength
+	for (int i = 0; i < 10; i++)
+	{
+		if (decipherRepeatingXOR(list_topTenKeyLengths[i], parsed_inputString, inputLength, &key))
+		{
+			keyLength = list_topTenKeyLengths[i];
+			break;
+		}
+	}	
+
+	if (debugging_mode)
+	{
+		for (int i = 0; i < keyLength; i++)
+			printf("%c", key[i]);
+	}	
+
+	char *outputString = NULL;
+	//If the key is found, then the keyLength will be nonzero
+	if (keyLength != 0)
+	{
+		outputString = (char *) malloc (sizeof (char) * (inputLength + 1));
+		for ( int i = 0; i < inputLength; i++)
+			outputString[i] = parsed_inputString[i] ^ key[ i%keyLength ];
+		outputString[inputLength] = '\0';	
+
+		char *outputFile = output_filename;
+		writeTextToFile (outputString, outputFile);
+	}	
+	
+
+	//Cleaning it all up
+	free (raw_inputString);
+	free (parsed_inputString);
+	free (list_distances);
+	free (list_topTenKeyLengths);
+	free (key);
+	free (outputString);	
+
+	if (keyLength == 0)
+		return 1;
+	else
+		return 0;
 }
 
-char *outputString = (char *) malloc (sizeof (char) * (inputLength + 1));
-int idx = 0;
-for ( int i = 0; i < inputLength; i++)
-{
-	outputString[i] = parsed_inputString[i] ^ key[ i%keyLength ];
-}
-outputString[inputLength] = '\0';
-char *outputFile = output_filename;
 
-writeTextToFile (outputString, outputFile);
-
-free (outputString);
-free (raw_inputString);
-free (parsed_inputString);
-free (list_normalizedEditDistances);
-free (list_topTenKeyLengths);
-
-
-}
 
 
 
 /**
- * The big one.
+ * The big one. Tries to break an inputstring, given a certain keylength
  * @param  keyLength   /
  * @param  inputString /
  * @param  inputLength /
@@ -130,11 +167,17 @@ bool decipherRepeatingXOR(int keyLength, char *inputString, int inputLength, cha
 	char **list_ptrsToBlocks = (char **) malloc (sizeof (char*) * keyLength);
 	int length = inputLength / keyLength;
 	int leftovers = inputLength % keyLength;
+	//So, since our goal is to do some fancy work with blocks
+	//We might have an input that can not be split evenly into 
+	//all the blocks, so some blocks may be larger than others
+
+	//Creating all the blocks, and writing the correct data into each one
 	for (int i = 0; i < keyLength; i++)
 	{
 		int currentLength = length + 1;
 		if (i < leftovers)
 			currentLength ++;
+
 		list_ptrsToBlocks[i] = (char *) malloc (sizeof (char) * currentLength);
 		int idx = 0;
 		for (int j = i; j < inputLength; j += keyLength, idx++)
@@ -146,75 +189,77 @@ bool decipherRepeatingXOR(int keyLength, char *inputString, int inputLength, cha
 	char *frequencyList = char_frequency_list;
 	char *key = (char *) malloc (sizeof (char) * (keyLength + 1));
 	bool foundKey;
+
 	for (int i = 0; i < keyLength; i++)
 	{
 		foundKey = false;
 		int currentLength = length;
 		if (i < leftovers)
 			currentLength++;
+
+		//Performing frequency analysis
+		//////////////////////////////////////////
 		char *temp = NULL;
+        char mostFrequentChar;
+        int maxCount = 0;
+		std::map<char, int> frequencyList_Input; 
 
-			std::map<char, int> frequencyList_Input; 
-        	for (int j = 0; j < currentLength; j++)
-	        {
-	        	char temp = list_ptrsToBlocks[i][j];
-	         	if (frequencyList_Input.count(temp) == 1)
-	         		frequencyList_Input[temp]++;
-	         	else 
-	         		frequencyList_Input[temp] = 1;
-	        }    
-	         
-	        char mostFrequentChar;
-	        int maxCount = 0;
-			//int der = 0;
-	        for (std::map<char, int>::iterator itr = frequencyList_Input.begin(); itr != frequencyList_Input.end(); itr++)
-	        {
-	        	if ((itr->second) > maxCount)
-	         	{
-	         		mostFrequentChar = (itr->first);
-	         		maxCount = (itr->second);
-	         	}
-				//printf("%.2x : %d\n", unsigned char (itr->first), itr->second);
-				//der++;
-	        }
-		//	printf("\n");
+       	for (int j = 0; j < currentLength; j++)
+        {
+        	char temp = list_ptrsToBlocks[i][j];
+         	if (frequencyList_Input.count(temp) == 1)
+         		frequencyList_Input[temp]++;
+         	else 
+         		frequencyList_Input[temp] = 1;
+        }    
+
+        for (std::map<char, int>::iterator itr = frequencyList_Input.begin(); itr != frequencyList_Input.end(); itr++)
+        {
+        	if ((itr->second) > maxCount)
+         	{
+         		mostFrequentChar = (itr->first);
+         		maxCount = (itr->second);
+         	}
+        }
 
 
 
-
-
-
-
+        //Running through all the possibilities for the most frequent character
+        //Trying all the different trial keys
+        //////////////////////////////////////////////////////
 		for (int j = 0; j < char_frequency_list_length; j++)
 		{
 			char trialKey = mostFrequentChar ^ frequencyList[j];
-			if (trialKey == '&')
-			{
-				printf("\n");
-			}
 			applyXORKeyToString(list_ptrsToBlocks[i], currentLength, trialKey, &temp);
 			if (check_valid_characters(temp, currentLength) == 1)
 			{
+
+				if (debugging_mode)
+					printf("Keylength %d: Found key #%d: %c // %.2x\n", keyLength, i, trialKey, trialKey);
 				key[i] = trialKey;
 				foundKey = true;
 				free(temp);
 				break;
 			}
-
 			free(temp);
 			temp = NULL;
 		}
+
 		if (foundKey == false)
 			break;
 	}
 	
 
-
+	//Cleanup stuff
 	for (int i = 0; i < keyLength; i++)
 		free(list_ptrsToBlocks[i]);
 	free(list_ptrsToBlocks);
+
+
 	if (foundKey == false)
 	{
+		if (debugging_mode)
+			printf("No key found for keylength %d\n", keyLength);
 		free (key);
 		return false;
 	}
@@ -224,6 +269,8 @@ bool decipherRepeatingXOR(int keyLength, char *inputString, int inputLength, cha
 		return true;
 	}
 }
+
+
 
 /**
 * Calculate the hamming distance
@@ -247,6 +294,8 @@ int calculateHammingDistance(char *inputString1, char *inputString2, int inputLe
 	return hammingDistance;
 }
 
+
+
 /**
  * Intuitive
  * @param  inputString /
@@ -267,6 +316,7 @@ int removeNewlines(char *inputString, int inputLength)
 	inputString[idx] = '\0';
 	return idx;
 }
+
 
 /**
 * Takes a character which represents a base 64 number, and encodes into into binary
@@ -294,13 +344,14 @@ char charToBase64(char input)
 
 /**
 * Changes a string which has the characters which represent a base 64 encoding, and then puts it into the binary
-* @param  inputString         [description]
-* @param  inputLength         [description]
-* @param  outputStringAddress [description]
-* @return                     [description]
+* @param  inputString         /
+* @param  inputLength         /
+* @param  outputStringAddress /
+* @return                     Length of output string
 */
 int base64toBase256(char *inputString, int inputLength, char **outputStringAddress)
 {
+	//Initializations
 	if (inputLength % 4 != 0)
 	{
 		fprintf(stderr, "Error[base64toBase256]: Passed an invalid input string, does not translate correctly into an output)");
@@ -308,23 +359,41 @@ int base64toBase256(char *inputString, int inputLength, char **outputStringAddre
 	}
 	int outputLength = (inputLength / 4) * 3;
 	char *outputString = (char *)malloc(sizeof (char)* (outputLength + 1));
+	if (outputString == NULL)
+	{
+		fprintf(stderr, "Error[base64toBase256]: Memory allocation problems");
+		exit(1);
+	}
 	int idx_output = 0;
-	for (int idx_input = 0; idx_input < inputLength; idx_input += 4, idx_output += 3)
+	int idx_input = 0;
+
+
+	for ( ; idx_input < inputLength; idx_input += 4, idx_output += 3)
 	{
 		outputString[idx_output] = (charToBase64(inputString[idx_input]) << 2) + (charToBase64(inputString[idx_input + 1]) >> 4);
 		outputString[idx_output + 1] = (charToBase64(inputString[idx_input + 1]) << 4) + (charToBase64(inputString[idx_input + 2]) >> 2);
 		outputString[idx_output + 2] = (charToBase64(inputString[idx_input + 2]) << 6) + charToBase64(inputString[idx_input + 3]);
 	}
+
+	//Adjusting size for padding
+	if (inputString[idx_input - 2] == '=')
+		outputLength -= 2;
+	else if (inputString[idx_input -1] == '=')
+		outputLength--; 
+
 	outputString[outputLength] = '\0';
+
+	//Outputs
 	*outputStringAddress = outputString;
 	return outputLength;
 }
 
 /**
-* Some hacked together code...DEFINITELY not portable haha
-* @param inputString         [description]
-* @param inputLength         [description]
-* @param outputStringAddress [description]
+* Some hacked together code
+* Finds the top ten floats in the list, and puts them in order
+* @param inputString         /
+* @param inputLength         /
+* @param outputStringAddress /
 */
 void findTopTenKeyLengths(float *inputString, int inputLength, int **outputStringAddress)
 {
@@ -334,17 +403,21 @@ void findTopTenKeyLengths(float *inputString, int inputLength, int **outputStrin
 	for (int i = 0; i < 10; i++)
 	{
 		float min = temp[0];
-		int index = 0;
+		float max = temp[0];
+		int idx_min = 0;
 		for (int j = 0; j < inputLength; j++)
 		{
-			if (temp[j] < min)
+			float currentFloat = temp[j];
+			if (currentFloat < min)
 			{
-				min = temp[j];
-				index = j;
+				min = currentFloat;
+				idx_min = j;
 			}
+			if (currentFloat > max)
+				max = currentFloat;
 		}
-		outputString[i] = index;
-		temp[index] = 10000;
+		outputString[i] = idx_min;
+		temp[idx_min] = max;
 	}
 	*outputStringAddress = outputString;
 	free(temp);
@@ -380,51 +453,31 @@ int check_valid_characters (char *inputString, int inputLength)
         if (tester >= 127)
             return -1;
 
-		//makeshift validation
-		if (tester == 37) //%
+        //stricter testing parameters
+		///////////////////////////
+		if (tester == 37)  //%
 			return -1;
 		if (tester == 126) //~
 			return -1;
-		if (tester == 35) //#
+		if (tester == 35)  //#
 			return -1;
+		if (tester == 42)  // *
+			return -1;
+		//even stricter testing 
+		///////////////////////////
+		/*
+		if (tester == 92) // backslash
+			return -1;
+		if (tester == 93) // ]
+			return -1;
+		if (tester == 94) // ^
+			return -1;
+		if (tester == '_')
+			return -1;
+		if (tester == '`')
+			return -1;
+			*/
     }
-	/*
-	int openBrackets = 0;
-	int openParentheses = 0;
-	bool foundSpace = false;
-    for (int i = 0; i < inputLength; i++)
-    {
-		unsigned char tester = (unsigned char) inputString[i];
-        if (tester >= 0  &&  tester <= 8)
-            return -1;
-        if (tester >= 11 &&  tester <= 12)
-            return -1;
-        if (tester >= 14 &&  tester <= 31)
-            return -1;
-        if (tester >= 127)
-            return -1;
-		if (tester == 32)
-			foundSpace = true;
-		if (tester == 40)
-			openParentheses++;
-		if (tester == 41)
-			openParentheses--;
-		if (tester == 123)
-			openBrackets++;
-		if (tester == 125)
-			openBrackets--;
-		if ((openBrackets < 0) || (openParentheses < 0))
-			return -1;
-		if (tester == 92)
-			return -1;
-		if (tester == 60 || tester == 62)
-            return -1; 
-    }
-	if ((openBrackets > 0) || (openParentheses > 0))
-		return -1;
-	if (!foundSpace)
-		return -1;
-		*/
     return 1;
 }
 
